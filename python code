@@ -1,0 +1,70 @@
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+import nltk
+from nltk.corpus import stopwords
+from nltk.stem.porter import PorterStemmer
+import re
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score
+import pickle
+
+# Download stopwords
+nltk.download('stopwords')
+
+# Load the dataset and remove duplicates
+sms_data = pd.read_csv('Spam SMS Collection', delimiter='\t', header=None, names=['label', 'message'])
+sms_data.drop_duplicates(inplace=True)
+sms_data.reset_index(drop=True, inplace=True)
+
+# Initialize the Porter Stemmer
+stemmer = PorterStemmer()
+corpus = []
+
+# Preprocessing loop
+for i in range(len(sms_data)):
+    msg = re.sub(r'[^a-zA-Z]', ' ', sms_data['message'][i])  # Remove non-alphabet characters
+    msg = msg.lower().split()  # Convert to lowercase and split into words
+    msg = [stemmer.stem(word) for word in msg if word not in stopwords.words('english')]  # Remove stopwords and stem words
+    corpus.append(' '.join(msg))  # Rejoin the processed words into a string
+
+# Vectorize the text data
+vectorizer = CountVectorizer(max_features=2500)
+X = vectorizer.fit_transform(corpus).toarray()
+
+# Encode the labels
+y = pd.get_dummies(sms_data['label'], drop_first=True).values
+
+# Split the dataset into training and testing sets
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# Train the Naive Bayes model
+nb_classifier = MultinomialNB(alpha=0.1)
+nb_classifier.fit(X_train, y_train)
+
+# Make predictions and calculate accuracy
+y_pred = nb_classifier.predict(X_test)
+accuracy = accuracy_score(y_test, y_pred) * 100
+print(f"Model Accuracy: {accuracy:.2f}%")
+
+# Spam prediction function
+def predict_spam(message):
+    processed_msg = re.sub(r'[^a-zA-Z]', ' ', message)
+    processed_msg = processed_msg.lower().split()
+    processed_msg = [stemmer.stem(word) for word in processed_msg if word not in stopwords.words('english')]
+    processed_msg = ' '.join(processed_msg)
+    vectorized_msg = vectorizer.transform([processed_msg]).toarray()
+    return nb_classifier.predict(vectorized_msg)
+
+# Test messages
+test_messages = [
+    "Hi! You are pre-qualified for Premium SBI Credit Card. Also get Rs.500 worth Amazon Gift Card*, 10X Rewards Point* & more. Click ",
+    "[Update] Congratulations Nile Yogesh, You account is activated for investment in Stocks. Click to invest now: ",
+    "Your Stock broker FALANA BROKING LIMITED reported your fund balance Rs.1500.5 & securities balance 0.0 as on end of MAY-20 ."
+]
+
+for msg in test_messages:
+    print("SPAM!" if predict_spam(msg) else "Not Spam.")
